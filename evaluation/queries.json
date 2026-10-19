@@ -1,0 +1,15 @@
+[
+    {
+        "query": "a dog",
+        "relevant_images": [
+            "000000000010",
+            "000000000015"
+        ]
+    },
+    {
+        "query": "person",
+        "relevant_images": [
+            "000000000020"
+        ]
+    }
+]

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Search</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1>AI Image Search</h1>
+            <p>Search your photos using natural language</p>
+            <form action="/search" method="post" class="search-form">
+                <input type="text" name="query" value="{{ query }}" placeholder="e.g. 'dog playing in grass' or 'me wearing a black hoodie'" required autofocus class="search-input">
+                <select name="top_k" class="k-select">
+                    <option value="5">Top 5</option>
+                    <option value="10" selected>Top 10</option>
+                    <option value="20">Top 20</option>
+                    <option value="50">Top 50</option>
+                </select>
+                <button type="submit" class="search-btn">Search</button>
+            </form>
+        </div>
+    </header>
+
+    <main class="container">
+        {% if query %}
+            <h2 class="results-title">Results for "<span class="highlight">{{ query }}</span>"</h2>
+            {% if results %}
+                <div class="grid">
+                    {% for item in results %}
+                        <div class="card" onclick="openModal('{{ item.url }}', '{{ item.final_score|round(2) }}', '{{ item.clip_score|round(2) }}', '{{ item.face_score|round(2) }}', '{{ item.object_score|round(2) }}', '{{ item.metadata.objects | tojson | forceescape }}')">
+                            <div class="card-img-wrapper">
+                                <img src="{{ item.url }}" alt="{{ item.metadata.filename }}" loading="lazy">
+                            </div>
+                            <div class="card-content">
+                                <div class="score-badge">Match: {{ (item.final_score * 100)|round|int }}%</div>
+                                {% if item.face_score > 0.4 %}
+                                    <div class="face-badge">👤 Face Match</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <p>No results found. Try a different query.</p>
+                </div>
+            {% endif %}
+        {% else %}
+            {% if gallery_images %}
+                <h2 class="results-title" style="margin-bottom: 20px; text-align: center; color: #a1a1aa; font-weight: normal;">Dataset Gallery (All {{ total_count }} Images)</h2>
+                <div class="grid">
+                    {% for url in gallery_images %}
+                        <div class="card" style="cursor: default;">
+                            <div class="card-img-wrapper">
+                                <img src="{{ url }}" loading="lazy">
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <p>Enter a query above to start searching.</p>
+                </div>
+            {% endif %}
+        {% endif %}
+    </main>
+
+    <!-- Modal -->
+    <div id="imageModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div class="modal-body">
+                <div id="fsContainer" class="modal-img-container" style="position: relative;">
+                    <img id="modalImg" src="" alt="Full size">
+                    <button id="enterFsBtn" class="fs-icon-btn" onclick="enterFullscreen()" title="Full Screen">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                    </button>
+                    <button id="exitFsBtn" class="fs-icon-btn exit" onclick="exitFullscreen()" title="Exit Full Screen">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
+                    </button>
+                </div>
+                <div class="modal-details">
+                    <h3>Image Details</h3>
+                    <p><strong>Final Match Score:</strong> <span id="mFinal"></span></p>
+                    <p><strong>Semantic (CLIP):</strong> <span id="mClip"></span></p>
+                    <p><strong>Identity (Face):</strong> <span id="mFace"></span></p>
+                    <p><strong>Object (YOLO):</strong> <span id="mObj"></span></p>
+                    <h4>Detected Objects:</h4>
+                    <ul id="mObjectsList"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openModal(url, final, clip, face, obj, objectsJson) {
+            document.getElementById('imageModal').style.display = "block";
+            document.getElementById('modalImg').src = url;
+            document.getElementById('mFinal').innerText = final;
+            document.getElementById('mClip').innerText = clip;
+            document.getElementById('mFace').innerText = face;
+            document.getElementById('mObj').innerText = obj;
+            
+            const list = document.getElementById('mObjectsList');
+            list.innerHTML = '';
+            try {
+                const objects = JSON.parse(objectsJson);
+                if (objects.length > 0) {
+                    objects.forEach(o => {
+                        let li = document.createElement('li');
+                        li.innerText = `${o.label} (${(o.confidence * 100).toFixed(0)}%)`;
+                        list.appendChild(li);
+                    });
+                } else {
+                    list.innerHTML = '<li>None</li>';
+                }
+            } catch (e) {
+                list.innerHTML = '<li>Error parsing objects</li>';
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('imageModal').style.display = "none";
+        }
+
+        function enterFullscreen() {
+            document.getElementById('fsContainer').classList.add('fullscreen');
+        }
+
+        function exitFullscreen() {
+            document.getElementById('fsContainer').classList.remove('fullscreen');
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('imageModal');
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>

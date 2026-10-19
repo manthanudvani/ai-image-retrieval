@@ -1,0 +1,19 @@
+dataset:
+  name: "coco"
+  max_images: 100
+
+retrieval:
+  top_k: 10
+
+models:
+  clip: "openai/clip-vit-base-patch32"
+  yolo: "yolov8n.pt"  # lightweight pretrained model
+  face: "buffalo_l"  # insightface model
+
+weights:
+  clip_weight: 0.60
+  face_weight: 0.25
+  object_weight: 0.15
+
+device:
+  auto: true
